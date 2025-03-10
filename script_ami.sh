@@ -17,6 +17,7 @@ sudo snap install amazon-ssm-agent --classic
 sudo systemctl enable amazon-ssm-agent
 sudo systemctl start amazon-ssm-agent
 
+# Cria diretório do projeto na instância
 sudo mkdir -p /home/ubuntu/wordpress
 cd /home/ubuntu/wordpress
 
