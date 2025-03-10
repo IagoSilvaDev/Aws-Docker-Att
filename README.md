@@ -377,7 +377,6 @@ Na criação do Launch Template, configure os seguintes parâmetros:
 ```bash
 # Monta o EFS (substitua 'fs-XXXXXXXX' pelo ID do seu EFS)
 sudo mount -t efs -o tls fs-XXXXXXXX:/ /mnt/efs
-Onde encontrar o ID do seu EFS: O ID do seu EFS pode ser encontrado no console do EFS, na seção File Systems. Clique no sistema de arquivos EFS que você criou e, na página de detalhes, localize o File System ID.
 ```
 
 **Onde encontrar o ID do seu EFS**: O ID do seu EFS pode ser encontrado no console do EFS, na seção File Systems. Clique no sistema de arquivos EFS que você criou e, na página de detalhes, localize o File System ID.
