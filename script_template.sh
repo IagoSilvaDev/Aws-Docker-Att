@@ -66,10 +66,3 @@ echo json_encode([\"status\" => \"OK\", \"message\" => \"Health check passed\"])
 exit;
 ?>
 EOF"
-
-# Confirma a criação do arquivo healthcheck.php no contêiner WordPress
-if sudo docker exec -i wordpress ls /var/www/html/healthcheck.php > /dev/null 2>&1; then
-  echo "Arquivo healthcheck.php criado com sucesso!"
-else
-  echo "Falha ao criar o arquivo healthcheck.php."
-fi

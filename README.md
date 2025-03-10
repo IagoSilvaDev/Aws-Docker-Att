@@ -10,12 +10,13 @@ Este projeto configura uma infraestrutura na AWS para hospedar o WordPress usand
 - **Docker** – Containerização da aplicação WordPress.
 - **Amazon RDS (MySQL)** – Banco de dados gerenciado para armazenamento persistente.
 - **Amazon EFS** – Sistema de arquivos compartilhado entre as instâncias do WordPress.
+- **Amazon IAM** – Serviço de gerenciamento de permissões e identidade na AWS.
 
 ##  Requisitos para Execução
 
 Antes de iniciar a implantação, certifique-se de ter o seguinte requisito:
 
-- **Conta AWS** com permissões para criar recursos como VPC, EC2, ALB, RDS e EFS.
+- **Conta AWS** com permissões para utilizar recursos como VPC, IAM, EC2, ALB, RDS e EFS.
 
 ##  Instalação e Execução
 
