@@ -151,7 +151,6 @@ O **NAT Gateway** permite que as instâncias privadas tenham acesso à internet 
 
 Agora, sua **VPC está configurada** com subnets públicas e privadas, permitindo a comunicação interna e o acesso externo conforme necessário.  
 
-Próximo passo: **Criar e configurar as instâncias EC2 com Docker**. 🚀  
 
 ### 3️⃣ Criando os Security Groups
 
