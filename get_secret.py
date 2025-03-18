@@ -22,7 +22,7 @@ def get_secret_value(secret_name, region_name="us-east-1"):
         return None
 
 # Nome do segredo e região
-secret_name = "meu-segredo-teste"
+secret_name = "nome-do-seu-segredo"
 region = "us-east-1"
 
 # Recupera os valores do segredo
