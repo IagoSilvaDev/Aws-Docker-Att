@@ -8,21 +8,26 @@ Este projeto configura uma infraestrutura na AWS para hospedar o WordPress usand
 - **AWS ALB (Application Load Balancer)** – Distribuição de tráfego entre as instâncias.
 - **AWS EC2 (Auto Scaling Group)** – Instâncias que executam contêineres Docker com o WordPress.
 - **Docker** – Containerização da aplicação WordPress.
+- **Docker Compose** – Orquestração dos contêineres da aplicação.
 - **Amazon RDS (MySQL)** – Banco de dados gerenciado para armazenamento persistente.
 - **Amazon EFS** – Sistema de arquivos compartilhado entre as instâncias do WordPress.
 - **Amazon IAM** – Serviço de gerenciamento de permissões e identidade na AWS.
+- **AWS Secrets Manager** – Armazenamento seguro de credenciais e variáveis sensíveis.
+- **AWS Systems Manager (Session Manager)** – Acesso seguro às instâncias EC2 sem necessidade de chave SSH.
+- **AWS CloudWatch** – Monitoramento e criação de alarmes para o escalonamento automático.
+- **Python (Boto3)** – SDK para interação com serviços AWS, usado para recuperação de segredos.
 
 ##  Requisitos para Execução
 
 Antes de iniciar a implantação, certifique-se de ter o seguinte requisito:
 
-- **Conta AWS** com permissões para utilizar recursos como VPC, IAM, EC2, ALB, RDS e EFS.
+- **Conta AWS** com permissões para utilizar recursos como VPC, IAM, EC2, ALB, RDS e EFS, System Manager, CloudWatch e Secret Manager.
 
 ##  Instalação e Execução
 
 ### 1️⃣ Criando a Role no IAM e Configurando Session Manager
 
-Para permitir que as instâncias EC2 utilizem o AWS Systems Manager (Session Manager) e acessem o Amazon EFS, é necessário criar uma Role no IAM com as permissões adequadas.
+Para permitir que as instâncias EC2 utilizem o AWS Systems Manager (Session Manager), acessem o Amazon EFS e os segredos armazenados no AWS Secrets Manager, foi necessário configurar uma Role no IAM com as permissões adequadas.
 
 1. **Acesse o Console da AWS** e vá até o serviço **IAM**.
 2. No menu lateral, clique em **Roles** e depois em **Create Role**.
@@ -31,7 +36,7 @@ Para permitir que as instâncias EC2 utilizem o AWS Systems Manager (Session Man
 5. Adicione as seguintes políticas:
    - **AmazonSSMManagedInstanceCore** → Permite acesso via AWS Systems Manager (Session Manager).
    - **AmazonElasticFileSystemFullAccess** → Permite que a instância EC2 utilize o EFS.
-7. Confirmque que sua Trusted Policy está desse jeito abaixo:
+6. Confirme que sua Trusted Policy está configurada conforme abaixo:
    ```json
    {
     "Version": "2012-10-17",
@@ -46,10 +51,27 @@ Para permitir que as instâncias EC2 utilizem o AWS Systems Manager (Session Man
         }
      ]
    }
-   
-8. Clique em **Next**, defina um nome para a Role (ex: `EC2_SSM_EFS_Role`) e finalize a criação.
-
-Após isso, esta Role poderá ser anexada às instâncias EC2 durante a configuração da infraestrutura.
+   ```
+7.Para permitir o acesso aos segredos armazenados no AWS Secrets Manager, crie uma inline policy e adicione à role existente:
+```json
+{
+ "Version": "2012-10-17",
+ "Statement": [
+     {
+         "Effect": "Allow",
+         "Action": [
+             "secretsmanager:GetResourcePolicy",
+             "secretsmanager:GetSecretValue",
+             "secretsmanager:DescribeSecret",
+             "secretsmanager:ListSecretVersionIds",
+             "secretsmanager:ListSecrets"
+         ],
+         "Resource": "*"
+     }
+  ]
+}
+ ```
+8.Clique em Next, defina um nome para a Role (ex: `EC2_SSM_EFS_Secrets_Role`) e finalize a criação.
 
 #### 🔹 Configurando o Session Manager
 
@@ -149,9 +171,6 @@ O **NAT Gateway** permite que as instâncias privadas tenham acesso à internet 
 
 ---
 
-Agora, sua **VPC está configurada** com subnets públicas e privadas, permitindo a comunicação interna e o acesso externo conforme necessário.  
-
-
 ### 3️⃣ Criando os Security Groups
 
 Os **Security Groups (SGs)** controlam o tráfego de entrada e saída dos recursos na VPC. Para este projeto, criaremos os seguintes SGs:
@@ -228,8 +247,6 @@ Agora, ajustamos as regras de **ingresso (inbound)** e **saída (outbound)** par
 
 ---
 
-Agora, os **Security Groups estão configurados** e as regras de tráfego ajustadas para garantir a comunicação segura entre os serviços.  
-
 ### 4️⃣ Criando a AMI para as Instâncias EC2
 
 A AMI (Amazon Machine Image) será usada para lançar as instâncias do WordPress. Para isso, primeiro criamos uma instância EC2, executamos um script de configuração e, depois, criamos a AMI.
@@ -249,23 +266,29 @@ A AMI (Amazon Machine Image) será usada para lançar as instâncias do WordPres
    - **Subrede**: Qualquer **subnet pública disponível**
    - **Ative a opção "Auto-assign Public IP"** (A instância precisa de internet)
    - **Security Group**: `EC2-SG`
-6. Em **IAM Role**, selecione a **Role criada anteriormente** com:
+6. Em **IAM Role**, selecione a **Role criada anteriormente**, garantindo que ela tenha:
    - **SSM Managed Instance Core** (Para conexão via Session Manager)
    - **Amazon Elastic File System Full Access** (Para acessar o EFS)
+   - **Permissões para acessar o AWS Secrets Manager** (Para recuperar variáveis de ambiente)
 
-7. Em **Advanced Details > User Data**, cole o `script_ami.sh`:
+7. Em **Advanced Details > User Data**, cole o `script_ami.sh`, que agora inclui a recuperação de variáveis do Secrets Manager.
 
-A instância leva alguns minutos para completar o download, então aguarde um tempo. Para checar a finalização conecte-se via Session manager use o comando:
+8. **IMPORTANTE:** Antes de criar a AMI, verifique se o nome do segredo que será usado no **AWS Secrets Manager** é correspondente ao que foi definido no script `get_secret.py`. O nome do segredo precisa estar exatamente igual ao utilizado no código para que a recuperação das variáveis funcione corretamente. O script `get_secret.py` é criado a partitr do `script_ami.sh` que é utilizado no User Data, logo você deve checar ele.
 
- ``` bash
- cat /tmp/setup_done
- ```
+9. A instância leva alguns minutos para completar a configuração. Para verificar a finalização, conecte-se via **Session Manager** e execute:
 
-8. Após a instância ser criada e o script ser finalizado com sucesso, selecione a instância na **console EC2**.
-9. Clique em **Actions > Image and templates > Create Image**.
-10. Forneça um nome para a imagem (ex: `wordpress-base-image`) e clique em **Create Image**.
-11. Aguarde a Imagem ser criada, cheque isso na opção **AMIs** da barra lateral.
-12. Após a imagem ser criada, ela estará disponível em **AMIs**. Agora, você pode usar essa imagem para criar novas instâncias EC2 baseadas nela.
+   ```bash
+   cat /tmp/setup_done
+10.Após a instância ser criada e o script ser finalizado com sucesso, selecione a instância na console EC2.
+
+11.Clique em Actions > Image and templates > Create Image.
+
+12.Forneça um nome para a imagem (ex: `wordpress-base-image`) e clique em Create Image.
+
+13.Aguarde a Imagem ser criada, cheque isso na opção AMIs da barra lateral.
+
+14.Após a imagem ser criada, ela estará disponível em AMIs. Agora, você pode usar essa imagem para criar novas instâncias EC2 baseadas nela.
+
 
 ### 5️⃣ Criando o Amazon EFS (Elastic File System)
 
@@ -337,7 +360,33 @@ O **Amazon RDS** será utilizado para armazenar o banco de dados do WordPress de
 
 ---
 
-### 7️⃣ Criando o Launch Template para as Instâncias EC2
+### 7️⃣ Criando o Segredo no AWS Secrets Manager
+
+Para armazenar informações sensíveis, como o **ID do EFS** e credenciais do **banco de dados**, utilizamos o **AWS Secrets Manager**. Esse segredo será acessado pelas instâncias EC2 durante a inicialização.
+
+1. No **AWS Console**, vá para **Secrets Manager** e clique em **Store a new secret**.
+
+2. Em **Secret type**, selecione **Other type of secret**.
+
+3. Em **Key/value**, adicione as seguintes chaves e valores:
+
+   - `EFS_ID`: **ID do seu Amazon EFS**
+   - `RDS_HOST`: **Nome do host do banco de dados**
+   - `RDS_PASSWORD`: **Senha do banco de dados**
+   - `RDS_ENDPOINT`: **Endpoint do banco de dados**
+
+4. **Defina um nome para o segredo** (exemplo: `data_secret`).
+
+   ⚠️ **IMPORTANTE:** O nome do segredo deve ser o mesmo utilizado no script `get_secret.py`, pois ele será referenciado diretamente no código para recuperar os valores armazenados.
+
+5. Escolha a **região** onde o segredo será armazenado (deve ser a mesma das instâncias EC2).
+
+6. Em **Encryption key**, selecione a **chave padrão da AWS**.
+
+7. Clique em **Next**, defina as permissões (caso necessário) e finalize a criação do segredo.
+
+
+### 8️⃣ Criando o Launch Template para as Instâncias EC2
 
 Agora, vamos criar um **Launch Template** para facilitar a criação de novas instâncias EC2 no Auto Scaling Group, com a configuração necessária para executar o Docker e o WordPress.
 
@@ -356,35 +405,11 @@ Na criação do Launch Template, configure os seguintes parâmetros:
 - **Instance Type**: Selecione o tipo de instância `t2.micro` (Free Tier).
 - **Key Pair**: Não é necessário escolher um par de chaves, pois as instâncias EC2 serão gerenciadas pelo **Session Manager**.
 - **Network Settings**: Não defina a VPC nem a Subnet agora, isso será configurado no Auto Scaling Group.
+- **Security Group**: Selecione o **Security Group** configurado para as instâncias EC2.
 - **IAM Role**: Selecione a **Role criada anteriormente** com permissões para acesso ao Systems Manager e ao EFS.
 - **User Data**: Insira o `script_template` para instalar o Docker, configurar o ambiente e iniciar o WordPress com Docker Compose.
-- **Não se esqueça de substituir os dados do seu ambiente no script**, especificamente nas partes de configuração do Docker e de montagem do EFS. Abaixo estão as instruções detalhadas sobre onde encontrar os valores necessários:
-
-1. **Configuração do Banco de Dados no Docker Compose**:
-   No arquivo de configuração do Docker Compose, substitua os seguintes valores para conectar o WordPress ao seu banco de dados RDS:
-   
-   ```bash
-   WORDPRESS_DB_HOST: {endpoint_do_RDS}  # Substitua pelo endpoint do seu banco de dados RDS
-   WORDPRESS_DB_USER: admin             # O nome de usuário do banco de dados (foi configurado ao criar o RDS)
-   WORDPRESS_DB_PASSWORD: {senha}       # A senha que você configurou ao criar o RDS
-   WORDPRESS_DB_NAME: wordpress         # O nome do banco de dados (se você usou 'wordpress' ao criar o banco de dados RDS)
-   
-**Onde encontrar o endpoint_do_RDS**: O endpoint do seu banco de dados RDS pode ser encontrado no console do RDS, na seção Databases. Basta selecionar o banco de dados que você criou e, na página de detalhes, localizar o Endpoint.
-
-2. **Montagem do EFS**:
-   Para montar o EFS na instância EC2, substitua o ID do seu EFS no comando abaixo. O ID do EFS pode ser encontrado no console do EFS.
-
-```bash
-# Monta o EFS (substitua 'fs-XXXXXXXX' pelo ID do seu EFS)
-sudo mount -t efs -o tls fs-XXXXXXXX:/ /mnt/efs
-```
-
-**Onde encontrar o ID do seu EFS**: O ID do seu EFS pode ser encontrado no console do EFS, na seção File Systems. Clique no sistema de arquivos EFS que você criou e, na página de detalhes, localize o File System ID.
-
-
-
   
-### 8️⃣ Criando e Configurando o Classic Load Balancer (CLB)
+### 9️⃣ Criando e Configurando o Classic Load Balancer (CLB)
 
 O **Classic Load Balancer (CLB)** será responsável por distribuir o tráfego de entrada entre as instâncias EC2 que executam o WordPress. Para garantir a alta disponibilidade, o CLB será configurado nas duas subnets públicas e configurado para monitorar a saúde das instâncias através de um health check na URL `/healthcheck.php`.
 
@@ -423,7 +448,7 @@ O **Classic Load Balancer (CLB)** será responsável por distribuir o tráfego d
 1. Após a configuração do Health Check, passe para a próxima etapa, onde será possível revisar as configurações.
 2. Clique em **Create** para criar o Classic Load Balancer.
 
-### 9️⃣ Criando e Configurando o Auto Scaling Group (ASG)
+### 🔟 Criando e Configurando o Auto Scaling Group (ASG)
 
 Agora que o **Classic Load Balancer** foi criado e configurado, vamos configurar o **Auto Scaling Group (ASG)** para garantir que sempre existam **2 instâncias EC2** rodando, com escalabilidade automática conforme necessário. O ASG será responsável por gerenciar o número de instâncias EC2 e distribuí-las nas duas subnets privadas.
 
@@ -447,7 +472,7 @@ Agora que o **Classic Load Balancer** foi criado e configurado, vamos configurar
 3. **Configuração de Capacity**:
    - **Desired Capacity**: `2` (Número de instâncias desejado)
    - **Minimum Capacity**: `2` (Número mínimo de instâncias)
-   - **Maximum Capacity**: `2` (Número máximo de instâncias)
+   - **Maximum Capacity**: `5` (Número máximo de instâncias)
 
 4. **Load Balancer**:
    - Selecione o **Classic Load Balancer** que você criou anteriormente (`WordPress-CLB`).
@@ -463,8 +488,52 @@ Agora que o **Classic Load Balancer** foi criado e configurado, vamos configurar
 7. **Revisar e Criar**:
    - Revise todas as configurações e, em seguida, clique em **Create Auto Scaling Group**.
 
-Agora, o **Auto Scaling Group** foi configurado e irá garantir que haja sempre **2 instâncias EC2** ativas e distribuídas entre as subnets privadas. O ASG escalonará automaticamente as instâncias conforme a demanda, mantendo o número mínimo, desejado e máximo de instâncias em 2.
-### 🔟 Finalização e Testes
+### 1️⃣1️⃣ Configurando Alarms no CloudWatch e Step Scaling no Auto Scaling Group
+
+Para garantir um **escalonamento automático eficiente**, utilizamos o **AWS CloudWatch** para criar dois alarmes baseados na métrica **RequestCount** do Load Balancer. Esses alarmes são usados para definir **Step Scaling Policies** no **Auto Scaling Group (ASG)**.
+
+#### 🔹 Criando os Alarmes do CloudWatch
+
+1. No **AWS Console**, acesse **CloudWatch > Alarms** e clique em **Create Alarm**.
+2. Escolha a **métrica**:  
+   - **ELB > Per-LB Metrics > RequestCount** (Número de requisições no Load Balancer).
+3. Selecione o **Load Balancer** associado ao WordPress.
+4. Defina as condições:
+
+   - **Alarme de Scale Out (Aumentar Instâncias)**:
+     - **Nome do Alarme**: `ScaleOut-RequestCount`
+     - Condição: `RequestCount ≥ 200`
+     - **Período**: `1 minuto`
+     - Aciona a **Step Scaling Policy de Scale Out** no ASG.
+
+   - **Alarme de Scale In (Reduzir Instâncias)**:
+     - **Nome do Alarme**: `ScaleIn-RequestCount`
+     - Condição: `RequestCount ≤ 300`
+     - **Período**: `1 minuto`
+     - Aciona a **Step Scaling Policy de Scale In** no ASG.
+
+5. Clique em **Next**, configure notificações se necessário e finalize a criação dos alarmes.
+
+#### 🔹 Criando Step Scaling Policies no Auto Scaling Group
+
+1. Acesse **EC2 > Auto Scaling Groups** e selecione o grupo criado anteriormente.
+2. Vá para **Scaling Policies** e clique em **Create Scaling Policy**.
+3. Escolha **Step Scaling** e vincule os alarmes criados anteriormente.
+
+   - **Scale Out Policy (Adicionar Instâncias)**:
+     - **Nome da Policy**: `ScaleOut-Policy`
+     - **Se RequestCount estiver entre 200 e 400** ➝ **Adiciona 1 instância**.
+     - **Se RequestCount for maior que 400** ➝ **Adiciona 2 instâncias**.
+     - **Coloque um Warm-up de 120 segundos na policy**.
+
+   - **Scale In Policy (Remover Instâncias)**:
+     - **Nome da Policy**: `ScaleIn-Policy`
+     - **Se RequestCount estiver entre 300 e 180** ➝ **Remove 2 instância**.
+     - **Se RequestCount for menor que 180** ➝ **Remove 1 instâncias**.
+
+4. Salve as configurações e aplique as políticas.
+
+### 1️⃣2️⃣ Finalização e Testes
 
 Agora que a arquitetura está configurada, é hora de realizar os testes para garantir que tudo esteja funcionando corretamente.
 
